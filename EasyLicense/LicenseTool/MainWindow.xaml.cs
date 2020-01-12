@@ -9,108 +9,185 @@ using EasyLicense.Lib.License.Validator;
 
 namespace EasyLicense.LicenseTool
 {
-	/// <summary>
-	///     Interaction logic for MainWindow.xaml
-	/// </summary>
-	public partial class MainWindow : Window
-	{
-		public MainWindow()
-		{
-			InitializeComponent();
+    /// <summary>
+    ///     Interaction logic for MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
+    {
+        public MainWindow()
+        {
+            InitializeComponent();
 
-			txtComputerKey.Text = new HardwareInfo().GetHardwareString();
-		}
+            txtComputerKey.Text = new HardwareInfo().GetHardwareString();
+            expireDatePicker.DisplayDateStart = DateTime.Now.AddMonths(-10);
+            expireDatePicker.DisplayDateEnd = DateTime.Now.AddYears(10);
+            expireDatePicker.SelectedDate = DateTime.Now.AddDays(5);
+        }
 
-		private void btnGenerateLicense_Click(object sender, RoutedEventArgs e)
-		{
-			GenerateLicense();
+        private void btnGenerateLicense_Click(object sender, RoutedEventArgs e)
+        {
+            GenerateLicense();
 
-			ValidateLicense();
-		}
+            ValidateLicense();
+        }
 
-		private void GenerateLicense()
-		{
-			if (!File.Exists("privateKey.xml"))
-			{
-				MessageBox.Show("Please create a license key first");
-				return;
-			}
+        private void GenerateLicense()
+        {
 
-			if (string.IsNullOrWhiteSpace(txtName.Text) || string.IsNullOrWhiteSpace(txtComputerKey.Text))
-			{
-				MessageBox.Show("Some field is missing");
-				return;
-			}
+            var privateKeyPath = GetWorkDirFile("privateKey.xml");
+            var publicKeyPath = GetWorkDirFile("publicKey.xml");
 
-			var privateKey = File.ReadAllText(@"privateKey.xml");
-			var generator = new LicenseGenerator(privateKey);
+            if (!File.Exists(privateKeyPath))
+            {
+                MessageBox.Show("Please create a license key first");
+                return;
+            }
 
-			var dict = new Dictionary<string, string>();
+            if (string.IsNullOrWhiteSpace(txtName.Text) || string.IsNullOrWhiteSpace(txtComputerKey.Text))
+            {
+                MessageBox.Show("Some field is missing");
+                return;
+            }
 
-			dict["name"] = txtName.Text;
-			dict["key"] = txtComputerKey.Text;
+            var privateKey = File.ReadAllText(privateKeyPath);
+            var generator = new LicenseGenerator(privateKey);
 
-			// generate the license
-			var license = generator.Generate("EasyLicense", Guid.NewGuid(), DateTime.UtcNow.AddYears(1), dict,
-				LicenseType.Standard);
-			
-			txtLicense.Text = license;
-			File.WriteAllText("license.lic", license);
+            var dict = new Dictionary<string, string>();
 
-			File.AppendAllText("license.log", $"License to {dict["name"]}, key is {dict["key"]}, Date is {DateTime.Now}");
-		}
+            dict["name"] = txtName.Text;
+            dict["key"] = txtComputerKey.Text;
 
-		private void ValidateLicense()
-		{
-			if (!File.Exists("publicKey.xml"))
-			{
-				MessageBox.Show("Please create a license key first");
-				return;
-			}
-			
-			var publicKey = File.ReadAllText(@"publicKey.xml");
+            LicenseType licenseType = LicenseType.None;
+            var selectedType = (type.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag;
+            Enum.TryParse<LicenseType>(selectedType.ToString(), out licenseType);
 
-			var validator = new LicenseValidator(publicKey, @"license.lic");
+            var expireDate = DateTime.Now.AddYears(10);
 
-			try
-			{
-				validator.AssertValidLicense();
+            if (licenseType == LicenseType.None)
+            {
+                MessageBox.Show("授权类型不能为空");
+                return;
+            }
 
-				var dict = validator.LicenseAttributes;
-				MessageBox.Show($"License to {dict["name"]}, key is {dict["key"]}");
+            switch (licenseType)
+            {
+                case LicenseType.None:
+                    break;
+                case LicenseType.Trial:
+                    expireDate = expireDatePicker.SelectedDate.Value;
+                    break;
+                case LicenseType.Standard:
+                    break;
+                case LicenseType.Personal:
+                    break;
+                case LicenseType.Floating:
+                    break;
+                case LicenseType.Subscription:
+                    break;
+                default:
+                    break;
+            }
 
-				if (dict["key"] != txtComputerKey.Text)
-				{
-					MessageBox.Show("invalid!");
-				}
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine(ex.Message);
-			}
-		}
 
-		private void btnGenerateLicenseKey_Click(object sender, RoutedEventArgs e)
-		{
-			// var assembly = AppDomain.CurrentDomain.BaseDirectory;
+            // generate the license
+            var license = generator.Generate("W7.License", Guid.NewGuid(), expireDate, dict,
+                licenseType);
 
-			if (File.Exists("privateKey.xml") || File.Exists("publicKey.xml"))
-			{
-				var result = MessageBox.Show("The key is existed, override it?", "Warning", MessageBoxButton.YesNo);
-				if (result == MessageBoxResult.No)
-				{
-					return;
-				}
-			}
+            txtLicense.Text = license;
+            var dir = $"{GetWorkDirFile("")}\\{dict["name"]}-{licenseType.ToString()}-{txtComputerKey.Text}-{expireDate.ToString("yyyyMMdd")}\\";
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            File.WriteAllText(dir + "license.lic", license);
 
-			var privateKey = "";
-			var publicKey = "";
-			LicenseGenerator.GenerateLicenseKey(out privateKey, out publicKey);
+            File.Copy(publicKeyPath, dir + "publicKey.xml",true);
 
-			File.WriteAllText("privateKey.xml", privateKey);
-			File.WriteAllText("publicKey.xml", publicKey);
+            System.Diagnostics.Process.Start(dir);
 
-			MessageBox.Show("The Key is created, please backup it.");
-		}
-	}
+            File.AppendAllText("license.log", $"License to {dict["name"]}, key is {dict["key"]}, Date is {DateTime.Now}");
+        }
+
+        private void ValidateLicense()
+        {
+
+            var privateKeyPath = GetWorkDirFile("privateKey.xml");
+            var publicKeyPath = GetWorkDirFile("publicKey.xml");
+
+            if (!File.Exists(publicKeyPath))
+            {
+                MessageBox.Show("Please create a license key first");
+                return;
+            }
+
+            var publicKey = File.ReadAllText(publicKeyPath);
+
+            var validator = new LicenseValidator(publicKey, @"license.lic");
+
+            try
+            {
+                validator.AssertValidLicense();
+
+                var dict = validator.LicenseAttributes;
+                MessageBox.Show($"License to {dict["name"]}, key is {dict["key"]}");
+
+                if (dict["key"] != txtComputerKey.Text)
+                {
+                    MessageBox.Show("invalid!");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private void btnGenerateLicenseKey_Click(object sender, RoutedEventArgs e)
+        {
+            // var assembly = AppDomain.CurrentDomain.BaseDirectory;
+            var privateKeyPath = GetWorkDirFile("privateKey.xml");
+            var publicKeyPath = GetWorkDirFile("publicKey.xml");
+
+            if (File.Exists(privateKeyPath) || File.Exists(publicKeyPath))
+            {
+                var result = MessageBox.Show("The key is existed, override it?", "Warning", MessageBoxButton.YesNo);
+                if (result == MessageBoxResult.No)
+                {
+                    return;
+                }
+            }
+
+            var privateKey = "";
+            var publicKey = "";
+            LicenseGenerator.GenerateLicenseKey(out privateKey, out publicKey);
+
+            File.WriteAllText(privateKeyPath, privateKey);
+            File.WriteAllText(publicKeyPath, publicKey);
+
+            MessageBox.Show("The Key is created, please backup it.");
+        }
+
+
+        private void btnChangeWorkDir_Click(object sender, RoutedEventArgs e)
+        {
+            var d = new System.Windows.Forms.FolderBrowserDialog();
+            var result = d.ShowDialog();
+            if (result == System.Windows.Forms.DialogResult.OK)
+            {
+                //if (File.Exists(Path.Combine(d.SelectedPath, "publicKey.xml"))
+                //     && File.Exists(Path.Combine(d.SelectedPath, "privateKey.xml")))
+                //{
+                txtWorkDir.Text = d.SelectedPath;
+                //}
+                //else
+                //{
+                //    MessageBox.Show("The public/private Key is not found.");
+                //}
+            }
+
+        }
+
+        string GetWorkDirFile(string name)
+        {
+            return Path.Combine(txtWorkDir.Text, name);
+        }
+    }
 }
