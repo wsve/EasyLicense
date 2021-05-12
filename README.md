@@ -54,7 +54,7 @@ EasyLicense use some code from rhino-licensing
 ---
 
 Donation
----------
+----------
 If you find EasyLicense is useful to you, feel free to support the project by making a donation!  
 ---
 <ol>
